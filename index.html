@@ -54,7 +54,6 @@
             margin: 15px 0; border: 1px solid #ddd;
             border-radius: 4px; text-align: center;
         }
-        /* ซ่อนลูกศรในช่อง input number */
         input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
     </style>
@@ -79,24 +78,22 @@
                 <input type="number" id="meterReadingInput" placeholder="กรอกเลขหน่วยไฟฟ้า" inputmode="numeric" pattern="[0-9]*" required>
                 <button type="submit">ยืนยันข้อมูล</button>
             </form>
-             <p id="modalStatus" style="color: green; font-weight: bold;"></p>
+             <p id="modalStatus" style="font-weight: bold;"></p>
         </div>
     </div>
 
     <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
 
     <script>
-        // === **สำคัญ** แก้ไข URL ตรงนี้ ===
+        // === **อัปเดต URL แล้ว** ===
         const webAppUrl = 'https://script.google.com/macros/s/AKfycbx8i2M8ulP59744o58SUAp4indrxyNibkGYj2uZaXMKMPhCP9-OMyF3lfox38CsOJYflw/exec';
 
-        // --- ส่วนของ Element ต่างๆ ---
         const mainScreen = document.getElementById('mainScreen');
         const scanScreen = document.getElementById('scanScreen');
         const startScanBtn = document.getElementById('startScanBtn');
         const stopScanBtn = document.getElementById('stopScanBtn');
         const qrReaderDivId = "qr-reader";
         
-        // Modal elements
         const meterModal = document.getElementById('meterModal');
         const meterForm = document.getElementById('meterForm');
         const modalQrData = document.getElementById('modalQrData');
@@ -104,64 +101,73 @@
         const modalStatus = document.getElementById('modalStatus');
 
         let html5QrCode;
-        let scannedQrData = null; // ตัวแปรสำหรับเก็บข้อมูล QR ที่สแกนได้
-
-        // --- ส่วนของฟังก์ชันการทำงาน ---
+        let scannedQrData = null;
 
         function onScanSuccess(decodedText, decodedResult) {
-            // หยุดกล้องทันทีที่สแกนเจอ
             html5QrCode.stop().then(() => {
                 console.log(`Scan successful, data: ${decodedText}`);
-                scannedQrData = decodedText; // เก็บข้อมูล QR ไว้
+                scannedQrData = decodedText;
                 
-                // แสดงข้อมูลใน Modal และเปิด Modal ขึ้นมา
                 modalQrData.textContent = scannedQrData;
-                meterReadingInput.value = ''; // ล้างค่าเก่าในช่องกรอก
-                modalStatus.textContent = ''; // ล้างสถานะเก่า
+                meterReadingInput.value = '';
+                modalStatus.textContent = '';
                 meterModal.style.display = 'flex';
-                meterReadingInput.focus(); // ให้เคอร์เซอร์ไปรอที่ช่องกรอกอัตโนมัติ
+                meterReadingInput.focus();
             }).catch(err => {
                 console.error("Failed to stop scanner after success.", err);
             });
         }
 
-        function onScanFailure(error) { /* ไม่ต้องทำอะไร */ }
+        function onScanFailure(error) { /* Do nothing */ }
 
-        // ฟังก์ชันสำหรับสลับหน้าจอ
         function showScreen(screenToShow) {
-            mainScreen.style.display = 'none';
-            scanScreen.style.display = 'none';
-            screenToShow.style.display = 'block';
+            mainScreen.style.display = (screenToShow === 'main') ? 'block' : 'none';
+            scanScreen.style.display = (screenToShow === 'scan') ? 'block' : 'none';
         }
-        
-        // --- ส่วนของ Event Listeners ---
 
-        // เมื่อกดปุ่ม "เริ่มสแกน"
-        startScanBtn.addEventListener('click', () => {
-            showScreen(scanScreen);
+        function startScanner() {
+            showScreen('scan');
             html5QrCode = new Html5Qrcode(qrReaderDivId);
+
+            // === **ส่วนที่แก้ไข: เพิ่มการรองรับบาร์โค้ด 1D** ===
+            const formatsToSupport = [
+                Html5QrcodeSupportedFormats.QR_CODE,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E
+            ];
+            
+            const config = { 
+                fps: 10, 
+                qrbox: { width: 250, height: 150 }, // ปรับกล่องสแกนให้เป็นแนวนอน
+                formatsToSupport: formatsToSupport 
+            };
+            
             html5QrCode.start(
                 { facingMode: "environment" },
-                { fps: 10, qrbox: { width: 250, height: 250 } },
+                config,
                 onScanSuccess,
                 onScanFailure
             ).catch(err => {
                 alert(`ไม่สามารถเปิดกล้องได้: ${err}`);
-                showScreen(mainScreen);
+                showScreen('main');
             });
-        });
+        }
+        
+        startScanBtn.addEventListener('click', startScanner);
 
-        // เมื่อกดปุ่ม "ยกเลิก"
         stopScanBtn.addEventListener('click', () => {
             if (html5QrCode && html5QrCode.isScanning) {
                 html5QrCode.stop().catch(err => console.error("Failed to stop scanner on cancel.", err));
             }
-            showScreen(mainScreen);
+            showScreen('main');
         });
 
-        // เมื่อกด "ยืนยันข้อมูล" ใน Pop-up
         meterForm.addEventListener('submit', (event) => {
-            event.preventDefault(); // ป้องกันการรีเฟรชหน้าเว็บ
+            event.preventDefault(); 
             
             const meterReading = meterReadingInput.value;
             if (!meterReading) {
@@ -169,6 +175,7 @@
                 return;
             }
 
+            modalStatus.style.color = 'blue';
             modalStatus.textContent = 'กำลังส่งข้อมูล...';
             
             const dataToSend = {
@@ -182,24 +189,23 @@
                 body: JSON.stringify(dataToSend)
             })
             .then(() => {
+                modalStatus.style.color = 'green';
                 modalStatus.textContent = '✅ ส่งข้อมูลสำเร็จ!';
-                // หน่วงเวลา 1.5 วินาที แล้วปิด Modal และกลับไปหน้าหลัก
+                
+                // === **ส่วนที่แก้ไข: ลดเวลาหน่วงและกลับไปหน้าสแกน** ===
                 setTimeout(() => {
                     meterModal.style.display = 'none';
-                    showScreen(mainScreen);
-                }, 1500);
+                    startScanner(); // เริ่มการสแกนใหม่ทันที
+                }, 1000); // ลดเหลือ 1 วินาที
             })
             .catch(error => {
                 modalStatus.style.color = 'red';
-                modalStatus.textContent = `❌ เกิดข้อผิดพลาด: ${error}`;
-                // หน่วงเวลา 3 วินาที แล้วให้ลองใหม่
+                modalStatus.textContent = `❌ เกิดข้อผิดพลาด`;
                  setTimeout(() => {
                     modalStatus.textContent = '';
-                    modalStatus.style.color = 'green';
                 }, 3000);
             });
         });
-
     </script>
 </body>
 </html>
