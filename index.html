@@ -54,7 +54,6 @@
             margin: 15px 0; border: 1px solid #ddd;
             border-radius: 4px; text-align: center;
         }
-        /* เพิ่มลิงก์ยกเลิกใน Modal */
         #modalCancelLink {
             display: block;
             margin-top: 15px;
@@ -118,7 +117,6 @@
         let scannedQrData = null;
 
         function onScanSuccess(decodedText, decodedResult) {
-            // เล่นเสียงทันทีที่สแกนเจอ
             if (sound) {
                 sound.currentTime = 0;
                 sound.play();
@@ -161,18 +159,10 @@
                 qrbox: { width: 250, height: 150 },
                 formatsToSupport: formatsToSupport 
             };
-
-            // === **ส่วนที่แก้ไข: เพิ่มการตั้งค่ากล้องขั้นสูง** ===
-            const videoConstraints = {
-                facingMode: "environment",
-                advanced: [
-                    { focusMode: "continuous" },
-                    { zoom: 1.0 } // สามารถปรับค่า zoom ได้ถ้าต้องการ
-                ]
-            };
             
+            // === **ส่วนที่แก้ไข: กลับไปใช้การตั้งค่ากล้องแบบพื้นฐานที่ทำงานได้แน่นอน** ===
             html5QrCode.start(
-                videoConstraints,
+                { facingMode: "environment" }, // ใช้วิธีเรียกแบบง่าย มี key แค่ 1 ตัว
                 config,
                 onScanSuccess,
                 onScanFailure
@@ -183,8 +173,7 @@
         }
         
         startScanBtn.addEventListener('click', () => {
-             // ปลดล็อกเสียงสำหรับ iOS
-            if (sound) {
+             if (sound) {
                 sound.load();
                 sound.play().catch(e => {});
                 sound.pause();
@@ -225,11 +214,10 @@
                 modalStatus.style.color = 'green';
                 modalStatus.textContent = '✅ ส่งข้อมูลสำเร็จ!';
                 
-                // === **ส่วนที่แก้ไข: ลดเวลาหน่วงและกลับไปหน้าสแกน** ===
                 setTimeout(() => {
                     meterModal.style.display = 'none';
                     startScanner(); 
-                }, 500); // ลดเหลือครึ่งวินาที
+                }, 500);
             })
             .catch(error => {
                 modalStatus.style.color = 'red';
@@ -240,11 +228,10 @@
             });
         });
 
-        // เพิ่ม Event Listener สำหรับลิงก์ยกเลิกใน Modal
         modalCancelLink.addEventListener('click', (event) => {
             event.preventDefault();
             meterModal.style.display = 'none';
-            startScanner(); // กลับไปหน้าสแกน
+            startScanner();
         });
 
     </script>
