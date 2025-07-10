@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Meter Scanner</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            text-align: center; margin: 0; background-color: #f4f4f9;
+            color: #333; display: flex; justify-content: center;
+            align-items: center; min-height: 100vh;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .container {
+            max-width: 95%; width: 480px; background: #fff;
+            padding: 25px; border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); margin: 20px;
+            box-sizing: border-box;
+        }
+        h1, h2 { color: #333; margin-top: 0; margin-bottom: 20px; }
+        #qr-reader { width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid #eee; }
+        .status-message {
+            margin-top: 20px; font-weight: bold; min-height: 50px;
+            display: flex; align-items: center; justify-content: center;
+            flex-direction: column;
+        }
+        #result { color: #28a745; font-size: 1.6em; word-break: break-all; }
+        button {
+            color: white; padding: 15px 20px; font-size: 1.1em;
+            font-weight: bold; border: none; border-radius: 8px;
+            cursor: pointer; transition: background-color 0.3s, transform 0.1s;
+            width: 100%; margin-top: 10px; box-sizing: border-box;
+        }
+        button:active { transform: scale(0.98); }
+        button#startScanBtn { background-color: #007bff; }
+        button#startScanBtn:hover { background-color: #0056b3; }
+        button#stopScanBtn { background-color: #6c757d; margin-top: 20px; }
+        button#stopScanBtn:hover { background-color: #5a6268; }
+
+        /* CSS สำหรับ Pop-up Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.6); display: flex;
+            justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-content {
+            background: white; padding: 25px; border-radius: 10px;
+            width: 90%; max-width: 400px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3); text-align: center;
+        }
+        .modal-content input[type="number"] {
+            width: calc(100% - 24px); padding: 12px; font-size: 1.5em;
+            margin: 15px 0; border: 1px solid #ddd;
+            border-radius: 4px; text-align: center;
+        }
+        /* ซ่อนลูกศรในช่อง input number */
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="mainScreen">
+            <h1>Meter Scanner</h1>
+            <button id="startScanBtn">กดเพื่อเริ่มสแกน</button>
+        </div>
+        <div id="scanScreen" style="display: none;">
+            <div id="qr-reader"></div>
+            <button id="stopScanBtn">ยกเลิก</button>
+        </div>
+    </div>
+
+    <div id="meterModal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <h2>บันทึกค่ามิเตอร์</h2>
+            <p>รหัสมิเตอร์: <strong id="modalQrData"></strong></p>
+            <form id="meterForm">
+                <input type="number" id="meterReadingInput" placeholder="กรอกเลขหน่วยไฟฟ้า" inputmode="numeric" pattern="[0-9]*" required>
+                <button type="submit">ยืนยันข้อมูล</button>
+            </form>
+             <p id="modalStatus" style="color: green; font-weight: bold;"></p>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
+
+    <script>
+        // === **สำคัญ** แก้ไข URL ตรงนี้ ===
+        const webAppUrl = 'https://script.google.com/macros/s/AKfycbx8i2M8ulP59744o58SUAp4indrxyNibkGYj2uZaXMKMPhCP9-OMyF3lfox38CsOJYflw/exec';
+
+        // --- ส่วนของ Element ต่างๆ ---
+        const mainScreen = document.getElementById('mainScreen');
+        const scanScreen = document.getElementById('scanScreen');
+        const startScanBtn = document.getElementById('startScanBtn');
+        const stopScanBtn = document.getElementById('stopScanBtn');
+        const qrReaderDivId = "qr-reader";
+        
+        // Modal elements
+        const meterModal = document.getElementById('meterModal');
+        const meterForm = document.getElementById('meterForm');
+        const modalQrData = document.getElementById('modalQrData');
+        const meterReadingInput = document.getElementById('meterReadingInput');
+        const modalStatus = document.getElementById('modalStatus');
+
+        let html5QrCode;
+        let scannedQrData = null; // ตัวแปรสำหรับเก็บข้อมูล QR ที่สแกนได้
+
+        // --- ส่วนของฟังก์ชันการทำงาน ---
+
+        function onScanSuccess(decodedText, decodedResult) {
+            // หยุดกล้องทันทีที่สแกนเจอ
+            html5QrCode.stop().then(() => {
+                console.log(`Scan successful, data: ${decodedText}`);
+                scannedQrData = decodedText; // เก็บข้อมูล QR ไว้
+                
+                // แสดงข้อมูลใน Modal และเปิด Modal ขึ้นมา
+                modalQrData.textContent = scannedQrData;
+                meterReadingInput.value = ''; // ล้างค่าเก่าในช่องกรอก
+                modalStatus.textContent = ''; // ล้างสถานะเก่า
+                meterModal.style.display = 'flex';
+                meterReadingInput.focus(); // ให้เคอร์เซอร์ไปรอที่ช่องกรอกอัตโนมัติ
+            }).catch(err => {
+                console.error("Failed to stop scanner after success.", err);
+            });
+        }
+
+        function onScanFailure(error) { /* ไม่ต้องทำอะไร */ }
+
+        // ฟังก์ชันสำหรับสลับหน้าจอ
+        function showScreen(screenToShow) {
+            mainScreen.style.display = 'none';
+            scanScreen.style.display = 'none';
+            screenToShow.style.display = 'block';
+        }
+        
+        // --- ส่วนของ Event Listeners ---
+
+        // เมื่อกดปุ่ม "เริ่มสแกน"
+        startScanBtn.addEventListener('click', () => {
+            showScreen(scanScreen);
+            html5QrCode = new Html5Qrcode(qrReaderDivId);
+            html5QrCode.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                onScanSuccess,
+                onScanFailure
+            ).catch(err => {
+                alert(`ไม่สามารถเปิดกล้องได้: ${err}`);
+                showScreen(mainScreen);
+            });
+        });
+
+        // เมื่อกดปุ่ม "ยกเลิก"
+        stopScanBtn.addEventListener('click', () => {
+            if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().catch(err => console.error("Failed to stop scanner on cancel.", err));
+            }
+            showScreen(mainScreen);
+        });
+
+        // เมื่อกด "ยืนยันข้อมูล" ใน Pop-up
+        meterForm.addEventListener('submit', (event) => {
+            event.preventDefault(); // ป้องกันการรีเฟรชหน้าเว็บ
+            
+            const meterReading = meterReadingInput.value;
+            if (!meterReading) {
+                alert('กรุณากรอกเลขหน่วยไฟฟ้า');
+                return;
+            }
+
+            modalStatus.textContent = 'กำลังส่งข้อมูล...';
+            
+            const dataToSend = {
+                qrData: scannedQrData,
+                meterReading: meterReading
+            };
+
+            fetch(webAppUrl, {
+                method: 'POST',
+                mode: 'no-cors', 
+                body: JSON.stringify(dataToSend)
+            })
+            .then(() => {
+                modalStatus.textContent = '✅ ส่งข้อมูลสำเร็จ!';
+                // หน่วงเวลา 1.5 วินาที แล้วปิด Modal และกลับไปหน้าหลัก
+                setTimeout(() => {
+                    meterModal.style.display = 'none';
+                    showScreen(mainScreen);
+                }, 1500);
+            })
+            .catch(error => {
+                modalStatus.style.color = 'red';
+                modalStatus.textContent = `❌ เกิดข้อผิดพลาด: ${error}`;
+                // หน่วงเวลา 3 วินาที แล้วให้ลองใหม่
+                 setTimeout(() => {
+                    modalStatus.textContent = '';
+                    modalStatus.style.color = 'green';
+                }, 3000);
+            });
+        });
+
+    </script>
+</body>
+</html>
