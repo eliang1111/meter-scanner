@@ -37,8 +37,6 @@
         button#startScanBtn:hover { background-color: #0056b3; }
         button#stopScanBtn { background-color: #6c757d; margin-top: 20px; }
         button#stopScanBtn:hover { background-color: #5a6268; }
-        button#focusBtn { background-color: #ffc107; margin-top: 10px; }
-        button#focusBtn:hover { background-color: #e0a800; }
 
         /* CSS สำหรับ Pop-up Modal */
         .modal-overlay {
@@ -65,25 +63,6 @@
         }
         input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
-        
-        .scan-controls {
-            margin-top: 10px;
-            display: flex;
-            gap: 10px;
-        }
-        .scan-controls button {
-            flex: 1;
-            margin-top: 0;
-        }
-        
-        .focus-status {
-            margin-top: 10px;
-            padding: 8px;
-            border-radius: 4px;
-            font-size: 0.9em;
-            background-color: #e9ecef;
-            color: #6c757d;
-        }
     </style>
 </head>
 <body>
@@ -94,13 +73,7 @@
         </div>
         <div id="scanScreen" style="display: none;">
             <div id="qr-reader"></div>
-            <div class="scan-controls">
-                <button id="focusBtn">📷 โฟกัส</button>
-                <button id="stopScanBtn">ยกเลิก</button>
-            </div>
-            <div id="focusStatus" class="focus-status">
-                กดปุ่มโฟกัสเพื่อปรับความคมชัดของกล้อง
-            </div>
+            <button id="stopScanBtn">ยกเลิก</button>
         </div>
     </div>
 
@@ -130,8 +103,6 @@
         const scanScreen = document.getElementById('scanScreen');
         const startScanBtn = document.getElementById('startScanBtn');
         const stopScanBtn = document.getElementById('stopScanBtn');
-        const focusBtn = document.getElementById('focusBtn');
-        const focusStatus = document.getElementById('focusStatus');
         const qrReaderDivId = "qr-reader";
         
         const meterModal = document.getElementById('meterModal');
@@ -144,40 +115,25 @@
 
         let html5QrCode;
         let scannedQrData = null;
-        let currentStream = null;
-        let isScanning = false;
-        let isTransitioning = false;
 
         function onScanSuccess(decodedText, decodedResult) {
-            if (isTransitioning) return; // ป้องกันการเรียกซ้อน
-            
-            isTransitioning = true;
-            
             if (sound) {
                 sound.currentTime = 0;
-                sound.play().catch(e => {});
+                sound.play();
             }
             
-            if (html5QrCode && isScanning) {
-                html5QrCode.stop().then(() => {
-                    isScanning = false;
-                    isTransitioning = false;
-                    console.log(`Scan successful, data: ${decodedText}`);
-                    scannedQrData = decodedText;
-                    
-                    modalQrData.textContent = scannedQrData;
-                    meterReadingInput.value = '';
-                    modalStatus.textContent = '';
-                    meterModal.style.display = 'flex';
-                    meterReadingInput.focus();
-                }).catch(err => {
-                    console.error("Failed to stop scanner after success.", err);
-                    isTransitioning = false;
-                    isScanning = false;
-                });
-            } else {
-                isTransitioning = false;
-            }
+            html5QrCode.stop().then(() => {
+                console.log(`Scan successful, data: ${decodedText}`);
+                scannedQrData = decodedText;
+                
+                modalQrData.textContent = scannedQrData;
+                meterReadingInput.value = '';
+                modalStatus.textContent = '';
+                meterModal.style.display = 'flex';
+                meterReadingInput.focus();
+            }).catch(err => {
+                console.error("Failed to stop scanner after success.", err);
+            });
         }
 
         function onScanFailure(error) { /* Do nothing */ }
@@ -187,134 +143,37 @@
             scanScreen.style.display = (screenToShow === 'scan') ? 'block' : 'none';
         }
 
-        // ฟังก์ชันสำหรับการโฟกัสที่ปรับให้เหมาะกับ iPhone
-        async function triggerFocus() {
-            if (isTransitioning) return;
-            
-            try {
-                // สำหรับ iPhone ใช้วิธี getUserMedia ใหม่
-                const constraints = {
-                    video: {
-                        facingMode: "environment",
-                        focusMode: "continuous",
-                        advanced: [
-                            { focusMode: "continuous" },
-                            { focusDistance: 0.1 }
-                        ]
-                    }
-                };
-                
-                const stream = await navigator.mediaDevices.getUserMedia(constraints);
-                const videoTrack = stream.getVideoTracks()[0];
-                
-                if (videoTrack) {
-                    const capabilities = videoTrack.getCapabilities();
-                    console.log("Camera capabilities:", capabilities);
-                    
-                    // ลองใช้ applyConstraints
-                    if (capabilities.focusMode) {
-                        await videoTrack.applyConstraints({
-                            focusMode: "continuous"
-                        });
-                        focusStatus.textContent = "✅ เปิดการโฟกัสอัตโนมัติแล้ว";
-                        focusStatus.style.backgroundColor = "#d4edda";
-                        focusStatus.style.color = "#155724";
-                    } else {
-                        focusStatus.textContent = "⚠️ กล้องไม่รองรับการปรับโฟกัสอัตโนมัติ";
-                        focusStatus.style.backgroundColor = "#fff3cd";
-                        focusStatus.style.color = "#856404";
-                    }
-                }
-                
-                // ปิด stream เพื่อไม่ให้ขัดแย้งกับ scanner
-                stream.getTracks().forEach(track => track.stop());
-                
-            } catch (error) {
-                console.error("Focus error:", error);
-                focusStatus.textContent = "⚠️ ไม่สามารถปรับโฟกัสได้";
-                focusStatus.style.backgroundColor = "#fff3cd";
-                focusStatus.style.color = "#856404";
-            }
-        }
-
-        async function startScanner() {
-            if (isScanning || isTransitioning) return; // ป้องกันการเรียกซ้อน
-            
-            isTransitioning = true;
+        function startScanner() {
             showScreen('scan');
-            
-            try {
-                html5QrCode = new Html5Qrcode(qrReaderDivId);
+            html5QrCode = new Html5Qrcode(qrReaderDivId);
 
-                const formatsToSupport = [
-                    Html5QrcodeSupportedFormats.QR_CODE,
-                    Html5QrcodeSupportedFormats.CODE_128,
-                    Html5QrcodeSupportedFormats.CODE_39,
-                    Html5QrcodeSupportedFormats.EAN_13
-                ];
-                
-                const config = { 
-                    fps: 10, 
-                    qrbox: { width: 250, height: 150 },
-                    formatsToSupport: formatsToSupport 
-                };
-                
-                // เริ่มด้วยการตั้งค่าพื้นฐานก่อน สำหรับ iPhone
-                const basicConstraints = { facingMode: "environment" };
-                
-                await html5QrCode.start(
-                    basicConstraints,
-                    config,
-                    onScanSuccess,
-                    onScanFailure
-                );
-                
-                isScanning = true;
-                isTransitioning = false;
-                
-                // ลองปรับแต่งเพิ่มเติมสำหรับ iPhone หลังจากเริ่มแล้ว
-                setTimeout(async () => {
-                    try {
-                        // สำหรับ iPhone ให้ใช้ MediaDevices API โดยตรง
-                        const constraints = {
-                            video: {
-                                facingMode: "environment",
-                                focusMode: "continuous"
-                            }
-                        };
-                        
-                        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
-                        
-                        focusStatus.textContent = "📷 กล้องพร้อมใช้งาน - กดปุ่มโฟกัสเพื่อปรับความคมชัด";
-                        focusStatus.style.backgroundColor = "#e9ecef";
-                        focusStatus.style.color = "#6c757d";
-                        
-                        // ปิด stream เก่าเพื่อไม่ให้ซ้อนทับ
-                        if (currentStream) {
-                            currentStream.getTracks().forEach(track => track.stop());
-                        }
-                        
-                    } catch (e) {
-                        console.log("Advanced camera setup not available:", e);
-                        focusStatus.textContent = "📷 กล้องเริ่มทำงาน (โหมดพื้นฐาน)";
-                        focusStatus.style.backgroundColor = "#fff3cd";
-                        focusStatus.style.color = "#856404";
-                    }
-                }, 1000);
-                
-            } catch (err) {
-                console.error("Scanner start error:", err);
-                isScanning = false;
-                isTransitioning = false;
-                alert(`ไม่สามารถเปิดกล้องได้: ${err.message}`);
+            const formatsToSupport = [
+                Html5QrcodeSupportedFormats.QR_CODE,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.EAN_13
+            ];
+            
+            const config = { 
+                fps: 10, 
+                qrbox: { width: 250, height: 150 },
+                formatsToSupport: formatsToSupport 
+            };
+            
+            // === **ส่วนที่แก้ไข: กลับไปใช้การตั้งค่ากล้องแบบพื้นฐานที่ทำงานได้แน่นอน** ===
+            html5QrCode.start(
+                { facingMode: "environment" }, // ใช้วิธีเรียกแบบง่าย มี key แค่ 1 ตัว
+                config,
+                onScanSuccess,
+                onScanFailure
+            ).catch(err => {
+                alert(`ไม่สามารถเปิดกล้องได้: ${err}`);
                 showScreen('main');
-            }
+            });
         }
         
         startScanBtn.addEventListener('click', () => {
-            if (isScanning || isTransitioning) return;
-            
-            if (sound) {
+             if (sound) {
                 sound.load();
                 sound.play().catch(e => {});
                 sound.pause();
@@ -323,32 +182,11 @@
         });
 
         stopScanBtn.addEventListener('click', () => {
-            if (isTransitioning) return;
-            
-            isTransitioning = true;
-            
-            if (html5QrCode && isScanning) {
-                html5QrCode.stop().then(() => {
-                    isScanning = false;
-                    isTransitioning = false;
-                    if (currentStream) {
-                        currentStream.getTracks().forEach(track => track.stop());
-                        currentStream = null;
-                    }
-                    showScreen('main');
-                }).catch(err => {
-                    console.error("Failed to stop scanner on cancel.", err);
-                    isScanning = false;
-                    isTransitioning = false;
-                    showScreen('main');
-                });
-            } else {
-                isTransitioning = false;
-                showScreen('main');
+            if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().catch(err => console.error("Failed to stop scanner on cancel.", err));
             }
+            showScreen('main');
         });
-
-        focusBtn.addEventListener('click', triggerFocus);
 
         meterForm.addEventListener('submit', (event) => {
             event.preventDefault(); 
@@ -378,10 +216,7 @@
                 
                 setTimeout(() => {
                     meterModal.style.display = 'none';
-                    // ตรวจสอบว่าไม่ได้สแกนอยู่ก่อนที่จะเริ่มใหม่
-                    if (!isScanning && !isTransitioning) {
-                        startScanner();
-                    }
+                    startScanner(); 
                 }, 500);
             })
             .catch(error => {
@@ -396,11 +231,7 @@
         modalCancelLink.addEventListener('click', (event) => {
             event.preventDefault();
             meterModal.style.display = 'none';
-            
-            // ตรวจสอบว่าไม่ได้สแกนอยู่ก่อนที่จะเริ่มใหม่
-            if (!isScanning && !isTransitioning) {
-                startScanner();
-            }
+            startScanner();
         });
 
     </script>
