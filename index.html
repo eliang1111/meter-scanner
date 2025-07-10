@@ -19,10 +19,7 @@
             box-sizing: border-box;
         }
         h1, h2 { color: #333; margin-top: 0; margin-bottom: 20px; }
-        #qr-reader { 
-            width: 100%; border-radius: 8px; overflow: hidden; 
-            border: 1px solid #eee; position: relative;
-        }
+        #qr-reader-container { width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid #eee; position: relative; }
         .status-message {
             margin-top: 20px; font-weight: bold; min-height: 50px;
             display: flex; align-items: center; justify-content: center;
@@ -41,7 +38,6 @@
         button#stopScanBtn { background-color: #6c757d; margin-top: 20px; }
         button#stopScanBtn:hover { background-color: #5a6268; }
 
-        /* CSS สำหรับ Pop-up Modal */
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background-color: rgba(0, 0, 0, 0.6); display: flex;
@@ -64,7 +60,6 @@
         input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
 
-        /* CSS สำหรับปุ่มแฟลช */
         #torch-button {
             position: absolute; top: 10px; right: 10px;
             background-color: rgba(0, 0, 0, 0.5);
@@ -81,7 +76,8 @@
             <button id="startScanBtn">กดเพื่อเริ่มสแกน</button>
         </div>
         <div id="scanScreen" style="display: none;">
-            <div id="qr-reader">
+            <div id="qr-reader-container">
+                <div id="qr-reader"></div>
                 <button id="torch-button" style="display: none;">🔦</button>
             </div>
             <button id="stopScanBtn">ยกเลิก</button>
@@ -106,16 +102,15 @@
     </audio>
 
     <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
-
     <script>
         const webAppUrl = 'https://script.google.com/macros/s/AKfycbx8i2M8ulP59744o58SUAp4indrxyNibkGYj2uZaXMKMPhCP9-OMyF3lfox38CsOJYflw/exec';
 
+        // --- DOM Elements ---
         const mainScreen = document.getElementById('mainScreen');
         const scanScreen = document.getElementById('scanScreen');
         const startScanBtn = document.getElementById('startScanBtn');
         const stopScanBtn = document.getElementById('stopScanBtn');
         const qrReaderDivId = "qr-reader";
-        
         const meterModal = document.getElementById('meterModal');
         const meterForm = document.getElementById('meterForm');
         const modalQrData = document.getElementById('modalQrData');
@@ -129,6 +124,7 @@
         let scannedQrData = null;
         let isTorchOn = false;
 
+        // --- Functions ---
         function onScanSuccess(decodedText, decodedResult) {
             if (sound) {
                 sound.currentTime = 0;
@@ -136,18 +132,14 @@
             }
             
             html5QrCode.stop().then(() => {
-                torchButton.style.display = 'none'; // ซ่อนปุ่มแฟลช
-                console.log(`Scan successful, data: ${decodedText}`);
+                torchButton.style.display = 'none';
                 scannedQrData = decodedText;
-                
                 modalQrData.textContent = scannedQrData;
                 meterReadingInput.value = '';
                 modalStatus.textContent = '';
                 meterModal.style.display = 'flex';
                 meterReadingInput.focus();
-            }).catch(err => {
-                console.error("Failed to stop scanner after success.", err);
-            });
+            }).catch(err => console.error("Failed to stop scanner after success.", err));
         }
 
         function onScanFailure(error) { /* Do nothing */ }
@@ -159,40 +151,38 @@
 
         function startScanner() {
             showScreen('scan');
-            html5QrCode = new Html5Qrcode(qrReaderDivId);
+            // ใช้การตั้งค่าแบบพื้นฐานและเสถียรที่สุด
+            html5QrCode = new Html5Qrcode(qrReaderDivId, {
+                formatsToSupport: [ 
+                    Html5QrcodeSupportedFormats.QR_CODE,
+                    Html5QrcodeSupportedFormats.CODE_128,
+                    Html5QrcodeSupportedFormats.CODE_39,
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8,
+                    Html5QrcodeSupportedFormats.UPC_A,
+                    Html5QrcodeSupportedFormats.UPC_E
+                ]
+            });
 
-            const formatsToSupport = [
-                Html5QrcodeSupportedFormats.QR_CODE,
-                Html5QrcodeSupportedFormats.CODE_128,
-                Html5QrcodeSupportedFormats.CODE_39,
-                Html5QrcodeSupportedFormats.EAN_13,
-                Html5QrcodeSupportedFormats.EAN_8,
-                Html5QrcodeSupportedFormats.UPC_A,
-                Html5QrcodeSupportedFormats.UPC_E
-            ];
-            
             const config = { 
                 fps: 10, 
-                qrbox: { width: 250, height: 150 },
-                formatsToSupport: formatsToSupport,
-                experimentalFeatures: {
-                    useBarCodeDetectorIfSupported: true
-                }
+                qrbox: { width: 250, height: 150 }
             };
-            
+
             html5QrCode.start(
-                { 
-                    facingMode: "environment",
-                    advanced: [{ focusMode: "continuous" }]
-                },
+                { facingMode: "environment" },
                 config,
                 onScanSuccess,
                 onScanFailure
-            ).then(() => {
-                // ตรวจสอบว่ากล้องรองรับแฟลชหรือไม่
-                const track = html5QrCode.getRunningTrackCameraCapabilities();
-                if (track.torch) {
-                    torchButton.style.display = 'block';
+            ).then(async () => {
+                // หลังจากกล้องเริ่มทำงานแล้ว ค่อยตรวจสอบเรื่องแฟลช
+                try {
+                    const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
+                    if (capabilities.torch) {
+                        torchButton.style.display = 'block';
+                    }
+                } catch (e) {
+                    console.warn("Could not get camera capabilities for torch.", e);
                 }
             }).catch(err => {
                 alert(`ไม่สามารถเปิดกล้องได้: ${err}`);
@@ -200,6 +190,7 @@
             });
         }
         
+        // --- Event Listeners ---
         startScanBtn.addEventListener('click', () => {
              if (sound) {
                 sound.load();
@@ -228,30 +219,17 @@
 
         meterForm.addEventListener('submit', (event) => {
             event.preventDefault(); 
-            
             const meterReading = meterReadingInput.value;
             if (!meterReading) {
-                alert('กรุณากรอกเลขหน่วยไฟฟ้า');
-                return;
+                alert('กรุณากรอกเลขหน่วยไฟฟ้า'); return;
             }
-
             modalStatus.style.color = 'blue';
             modalStatus.textContent = 'กำลังส่งข้อมูล...';
-            
-            const dataToSend = {
-                qrData: scannedQrData,
-                meterReading: meterReading
-            };
-
-            fetch(webAppUrl, {
-                method: 'POST',
-                mode: 'no-cors', 
-                body: JSON.stringify(dataToSend)
-            })
+            const dataToSend = { qrData: scannedQrData, meterReading: meterReading };
+            fetch(webAppUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify(dataToSend) })
             .then(() => {
                 modalStatus.style.color = 'green';
                 modalStatus.textContent = '✅ ส่งข้อมูลสำเร็จ!';
-                
                 setTimeout(() => {
                     meterModal.style.display = 'none';
                     startScanner(); 
@@ -260,9 +238,7 @@
             .catch(error => {
                 modalStatus.style.color = 'red';
                 modalStatus.textContent = `❌ เกิดข้อผิดพลาด`;
-                 setTimeout(() => {
-                    modalStatus.textContent = '';
-                }, 3000);
+                 setTimeout(() => { modalStatus.textContent = ''; }, 3000);
             });
         });
 
