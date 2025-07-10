@@ -19,7 +19,10 @@
             box-sizing: border-box;
         }
         h1, h2 { color: #333; margin-top: 0; margin-bottom: 20px; }
-        #qr-reader { width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid #eee; }
+        #qr-reader { 
+            width: 100%; border-radius: 8px; overflow: hidden; 
+            border: 1px solid #eee; position: relative;
+        }
         .status-message {
             margin-top: 20px; font-weight: bold; min-height: 50px;
             display: flex; align-items: center; justify-content: center;
@@ -55,14 +58,20 @@
             border-radius: 4px; text-align: center;
         }
         #modalCancelLink {
-            display: block;
-            margin-top: 15px;
-            color: #6c757d;
-            font-size: 0.9em;
-            text-decoration: none;
+            display: block; margin-top: 15px; color: #6c757d;
+            font-size: 0.9em; text-decoration: none;
         }
         input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
+
+        /* CSS สำหรับปุ่มแฟลช */
+        #torch-button {
+            position: absolute; top: 10px; right: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white; border: none; border-radius: 50%;
+            width: 40px; height: 40px; font-size: 20px;
+            cursor: pointer; z-index: 10;
+        }
     </style>
 </head>
 <body>
@@ -72,7 +81,9 @@
             <button id="startScanBtn">กดเพื่อเริ่มสแกน</button>
         </div>
         <div id="scanScreen" style="display: none;">
-            <div id="qr-reader"></div>
+            <div id="qr-reader">
+                <button id="torch-button" style="display: none;">🔦</button>
+            </div>
             <button id="stopScanBtn">ยกเลิก</button>
         </div>
     </div>
@@ -112,9 +123,11 @@
         const modalStatus = document.getElementById('modalStatus');
         const modalCancelLink = document.getElementById('modalCancelLink');
         const sound = document.getElementById('scanSound');
+        const torchButton = document.getElementById('torch-button');
 
         let html5QrCode;
         let scannedQrData = null;
+        let isTorchOn = false;
 
         function onScanSuccess(decodedText, decodedResult) {
             if (sound) {
@@ -123,6 +136,7 @@
             }
             
             html5QrCode.stop().then(() => {
+                torchButton.style.display = 'none'; // ซ่อนปุ่มแฟลช
                 console.log(`Scan successful, data: ${decodedText}`);
                 scannedQrData = decodedText;
                 
@@ -151,22 +165,36 @@
                 Html5QrcodeSupportedFormats.QR_CODE,
                 Html5QrcodeSupportedFormats.CODE_128,
                 Html5QrcodeSupportedFormats.CODE_39,
-                Html5QrcodeSupportedFormats.EAN_13
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+                Html5QrcodeSupportedFormats.UPC_A,
+                Html5QrcodeSupportedFormats.UPC_E
             ];
             
             const config = { 
                 fps: 10, 
                 qrbox: { width: 250, height: 150 },
-                formatsToSupport: formatsToSupport 
+                formatsToSupport: formatsToSupport,
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
+                }
             };
             
-            // === **ส่วนที่แก้ไข: กลับไปใช้การตั้งค่ากล้องแบบพื้นฐานที่ทำงานได้แน่นอน** ===
             html5QrCode.start(
-                { facingMode: "environment" }, // ใช้วิธีเรียกแบบง่าย มี key แค่ 1 ตัว
+                { 
+                    facingMode: "environment",
+                    advanced: [{ focusMode: "continuous" }]
+                },
                 config,
                 onScanSuccess,
                 onScanFailure
-            ).catch(err => {
+            ).then(() => {
+                // ตรวจสอบว่ากล้องรองรับแฟลชหรือไม่
+                const track = html5QrCode.getRunningTrackCameraCapabilities();
+                if (track.torch) {
+                    torchButton.style.display = 'block';
+                }
+            }).catch(err => {
                 alert(`ไม่สามารถเปิดกล้องได้: ${err}`);
                 showScreen('main');
             });
@@ -185,7 +213,17 @@
             if (html5QrCode && html5QrCode.isScanning) {
                 html5QrCode.stop().catch(err => console.error("Failed to stop scanner on cancel.", err));
             }
+            torchButton.style.display = 'none';
             showScreen('main');
+        });
+
+        torchButton.addEventListener('click', () => {
+            if (html5QrCode && html5QrCode.isScanning) {
+                isTorchOn = !isTorchOn;
+                html5QrCode.applyVideoConstraints({
+                    advanced: [{ torch: isTorchOn }]
+                });
+            }
         });
 
         meterForm.addEventListener('submit', (event) => {
@@ -233,7 +271,6 @@
             meterModal.style.display = 'none';
             startScanner();
         });
-
     </script>
 </body>
 </html>
