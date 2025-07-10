@@ -54,6 +54,14 @@
             margin: 15px 0; border: 1px solid #ddd;
             border-radius: 4px; text-align: center;
         }
+        /* เพิ่มลิงก์ยกเลิกใน Modal */
+        #modalCancelLink {
+            display: block;
+            margin-top: 15px;
+            color: #6c757d;
+            font-size: 0.9em;
+            text-decoration: none;
+        }
         input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
     </style>
@@ -79,13 +87,17 @@
                 <button type="submit">ยืนยันข้อมูล</button>
             </form>
              <p id="modalStatus" style="font-weight: bold;"></p>
+             <a href="#" id="modalCancelLink">ยกเลิก</a>
         </div>
     </div>
+
+    <audio id="scanSound" preload="auto">
+        <source src="https://github.com/tonatona/card-flip/raw/master/sound/turn.mp3" type="audio/mpeg">
+    </audio>
 
     <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
 
     <script>
-        // === **อัปเดต URL แล้ว** ===
         const webAppUrl = 'https://script.google.com/macros/s/AKfycbx8i2M8ulP59744o58SUAp4indrxyNibkGYj2uZaXMKMPhCP9-OMyF3lfox38CsOJYflw/exec';
 
         const mainScreen = document.getElementById('mainScreen');
@@ -99,11 +111,19 @@
         const modalQrData = document.getElementById('modalQrData');
         const meterReadingInput = document.getElementById('meterReadingInput');
         const modalStatus = document.getElementById('modalStatus');
+        const modalCancelLink = document.getElementById('modalCancelLink');
+        const sound = document.getElementById('scanSound');
 
         let html5QrCode;
         let scannedQrData = null;
 
         function onScanSuccess(decodedText, decodedResult) {
+            // เล่นเสียงทันทีที่สแกนเจอ
+            if (sound) {
+                sound.currentTime = 0;
+                sound.play();
+            }
+            
             html5QrCode.stop().then(() => {
                 console.log(`Scan successful, data: ${decodedText}`);
                 scannedQrData = decodedText;
@@ -129,25 +149,30 @@
             showScreen('scan');
             html5QrCode = new Html5Qrcode(qrReaderDivId);
 
-            // === **ส่วนที่แก้ไข: เพิ่มการรองรับบาร์โค้ด 1D** ===
             const formatsToSupport = [
                 Html5QrcodeSupportedFormats.QR_CODE,
                 Html5QrcodeSupportedFormats.CODE_128,
                 Html5QrcodeSupportedFormats.CODE_39,
-                Html5QrcodeSupportedFormats.EAN_13,
-                Html5QrcodeSupportedFormats.EAN_8,
-                Html5QrcodeSupportedFormats.UPC_A,
-                Html5QrcodeSupportedFormats.UPC_E
+                Html5QrcodeSupportedFormats.EAN_13
             ];
             
             const config = { 
                 fps: 10, 
-                qrbox: { width: 250, height: 150 }, // ปรับกล่องสแกนให้เป็นแนวนอน
+                qrbox: { width: 250, height: 150 },
                 formatsToSupport: formatsToSupport 
+            };
+
+            // === **ส่วนที่แก้ไข: เพิ่มการตั้งค่ากล้องขั้นสูง** ===
+            const videoConstraints = {
+                facingMode: "environment",
+                advanced: [
+                    { focusMode: "continuous" },
+                    { zoom: 1.0 } // สามารถปรับค่า zoom ได้ถ้าต้องการ
+                ]
             };
             
             html5QrCode.start(
-                { facingMode: "environment" },
+                videoConstraints,
                 config,
                 onScanSuccess,
                 onScanFailure
@@ -157,7 +182,15 @@
             });
         }
         
-        startScanBtn.addEventListener('click', startScanner);
+        startScanBtn.addEventListener('click', () => {
+             // ปลดล็อกเสียงสำหรับ iOS
+            if (sound) {
+                sound.load();
+                sound.play().catch(e => {});
+                sound.pause();
+            }
+            startScanner();
+        });
 
         stopScanBtn.addEventListener('click', () => {
             if (html5QrCode && html5QrCode.isScanning) {
@@ -195,8 +228,8 @@
                 // === **ส่วนที่แก้ไข: ลดเวลาหน่วงและกลับไปหน้าสแกน** ===
                 setTimeout(() => {
                     meterModal.style.display = 'none';
-                    startScanner(); // เริ่มการสแกนใหม่ทันที
-                }, 1000); // ลดเหลือ 1 วินาที
+                    startScanner(); 
+                }, 500); // ลดเหลือครึ่งวินาที
             })
             .catch(error => {
                 modalStatus.style.color = 'red';
@@ -206,6 +239,14 @@
                 }, 3000);
             });
         });
+
+        // เพิ่ม Event Listener สำหรับลิงก์ยกเลิกใน Modal
+        modalCancelLink.addEventListener('click', (event) => {
+            event.preventDefault();
+            meterModal.style.display = 'none';
+            startScanner(); // กลับไปหน้าสแกน
+        });
+
     </script>
 </body>
 </html>
