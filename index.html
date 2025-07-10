@@ -37,6 +37,8 @@
         button#startScanBtn:hover { background-color: #0056b3; }
         button#stopScanBtn { background-color: #6c757d; margin-top: 20px; }
         button#stopScanBtn:hover { background-color: #5a6268; }
+        button#focusBtn { background-color: #ffc107; margin-top: 10px; }
+        button#focusBtn:hover { background-color: #e0a800; }
 
         /* CSS สำหรับ Pop-up Modal */
         .modal-overlay {
@@ -63,6 +65,25 @@
         }
         input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         input[type=number] { -moz-appearance: textfield; }
+        
+        .scan-controls {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .scan-controls button {
+            flex: 1;
+            margin-top: 0;
+        }
+        
+        .focus-status {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            background-color: #e9ecef;
+            color: #6c757d;
+        }
     </style>
 </head>
 <body>
@@ -73,7 +94,13 @@
         </div>
         <div id="scanScreen" style="display: none;">
             <div id="qr-reader"></div>
-            <button id="stopScanBtn">ยกเลิก</button>
+            <div class="scan-controls">
+                <button id="focusBtn">📷 โฟกัส</button>
+                <button id="stopScanBtn">ยกเลิก</button>
+            </div>
+            <div id="focusStatus" class="focus-status">
+                กดปุ่มโฟกัสเพื่อปรับความคมชัดของกล้อง
+            </div>
         </div>
     </div>
 
@@ -103,6 +130,8 @@
         const scanScreen = document.getElementById('scanScreen');
         const startScanBtn = document.getElementById('startScanBtn');
         const stopScanBtn = document.getElementById('stopScanBtn');
+        const focusBtn = document.getElementById('focusBtn');
+        const focusStatus = document.getElementById('focusStatus');
         const qrReaderDivId = "qr-reader";
         
         const meterModal = document.getElementById('meterModal');
@@ -115,6 +144,7 @@
 
         let html5QrCode;
         let scannedQrData = null;
+        let currentStream = null;
 
         function onScanSuccess(decodedText, decodedResult) {
             if (sound) {
@@ -143,7 +173,64 @@
             scanScreen.style.display = (screenToShow === 'scan') ? 'block' : 'none';
         }
 
-        function startScanner() {
+        // ฟังก์ชันสำหรับการโฟกัส
+        async function triggerFocus() {
+            try {
+                if (currentStream) {
+                    const videoTrack = currentStream.getVideoTracks()[0];
+                    if (videoTrack) {
+                        const capabilities = videoTrack.getCapabilities();
+                        
+                        // ตรวจสอบว่าสามารถใช้ focus mode ได้หรือไม่
+                        if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                            await videoTrack.applyConstraints({
+                                advanced: [{
+                                    focusMode: 'continuous',
+                                    focusDistance: 0.1 // ระยะใกล้สำหรับ barcode
+                                }]
+                            });
+                            focusStatus.textContent = "✅ เปิดการโฟกัสอัตโนมัติแล้ว";
+                            focusStatus.style.backgroundColor = "#d4edda";
+                            focusStatus.style.color = "#155724";
+                        } else if (capabilities.focusMode && capabilities.focusMode.includes('manual')) {
+                            // ถ้าไม่มี continuous ให้ใช้ manual focus
+                            await videoTrack.applyConstraints({
+                                advanced: [{
+                                    focusMode: 'manual',
+                                    focusDistance: 0.1
+                                }]
+                            });
+                            focusStatus.textContent = "✅ ปรับโฟกัสแบบ manual แล้ว";
+                            focusStatus.style.backgroundColor = "#d4edda";
+                            focusStatus.style.color = "#155724";
+                        } else {
+                            // ถ้าไม่สามารถใช้ focus ได้ ให้ลองปรับ zoom แทน
+                            if (capabilities.zoom) {
+                                await videoTrack.applyConstraints({
+                                    advanced: [{
+                                        zoom: Math.min(capabilities.zoom.max, 2.0)
+                                    }]
+                                });
+                                focusStatus.textContent = "✅ ปรับ zoom เพื่อให้เห็นชัดขึ้น";
+                                focusStatus.style.backgroundColor = "#d1ecf1";
+                                focusStatus.style.color = "#0c5460";
+                            } else {
+                                focusStatus.textContent = "❌ อุปกรณ์ไม่รองรับการโฟกัส";
+                                focusStatus.style.backgroundColor = "#f8d7da";
+                                focusStatus.style.color = "#721c24";
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error("Focus error:", error);
+                focusStatus.textContent = "⚠️ ไม่สามารถปรับโฟกัสได้";
+                focusStatus.style.backgroundColor = "#fff3cd";
+                focusStatus.style.color = "#856404";
+            }
+        }
+
+        async function startScanner() {
             showScreen('scan');
             html5QrCode = new Html5Qrcode(qrReaderDivId);
 
@@ -160,16 +247,57 @@
                 formatsToSupport: formatsToSupport 
             };
             
-            // === **ส่วนที่แก้ไข: กลับไปใช้การตั้งค่ากล้องแบบพื้นฐานที่ทำงานได้แน่นอน** ===
-            html5QrCode.start(
-                { facingMode: "environment" }, // ใช้วิธีเรียกแบบง่าย มี key แค่ 1 ตัว
-                config,
-                onScanSuccess,
-                onScanFailure
-            ).catch(err => {
-                alert(`ไม่สามารถเปิดกล้องได้: ${err}`);
-                showScreen('main');
-            });
+            // เพิ่มการตั้งค่า constraints สำหรับ auto focus
+            const cameraConstraints = {
+                facingMode: "environment",
+                advanced: [
+                    {
+                        focusMode: "continuous",
+                        focusDistance: 0.1
+                    }
+                ]
+            };
+            
+            try {
+                await html5QrCode.start(
+                    cameraConstraints,
+                    config,
+                    onScanSuccess,
+                    onScanFailure
+                );
+                
+                // เก็บ stream reference สำหรับการโฟกัส
+                setTimeout(async () => {
+                    try {
+                        currentStream = await navigator.mediaDevices.getUserMedia({
+                            video: cameraConstraints
+                        });
+                        focusStatus.textContent = "📷 กล้องพร้อมใช้งาน - กดปุ่มโฟกัสเพื่อปรับความคมชัด";
+                        focusStatus.style.backgroundColor = "#e9ecef";
+                        focusStatus.style.color = "#6c757d";
+                    } catch (e) {
+                        console.error("Stream access error:", e);
+                    }
+                }, 1000);
+                
+            } catch (err) {
+                console.error("Scanner start error:", err);
+                // ถ้าไม่สามารถใช้ advanced constraints ได้ ให้ลองแบบง่าย
+                try {
+                    await html5QrCode.start(
+                        { facingMode: "environment" },
+                        config,
+                        onScanSuccess,
+                        onScanFailure
+                    );
+                    focusStatus.textContent = "📷 กล้องเริ่มทำงาน (โหมดพื้นฐาน)";
+                    focusStatus.style.backgroundColor = "#fff3cd";
+                    focusStatus.style.color = "#856404";
+                } catch (basicErr) {
+                    alert(`ไม่สามารถเปิดกล้องได้: ${basicErr}`);
+                    showScreen('main');
+                }
+            }
         }
         
         startScanBtn.addEventListener('click', () => {
@@ -185,8 +313,14 @@
             if (html5QrCode && html5QrCode.isScanning) {
                 html5QrCode.stop().catch(err => console.error("Failed to stop scanner on cancel.", err));
             }
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+                currentStream = null;
+            }
             showScreen('main');
         });
+
+        focusBtn.addEventListener('click', triggerFocus);
 
         meterForm.addEventListener('submit', (event) => {
             event.preventDefault(); 
