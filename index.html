@@ -154,16 +154,26 @@
                 Html5QrcodeSupportedFormats.EAN_13
             ];
             
+            // === **ส่วนที่แก้ไข: เพิ่มการตั้งค่ากล้องขั้นสูงใน config** ===
             const config = { 
                 fps: 10, 
                 qrbox: { width: 250, height: 150 },
-                formatsToSupport: formatsToSupport 
+                formatsToSupport: formatsToSupport,
+                experimentalFeatures: {
+                    useBarCodeDetectorIfSupported: true
+                },
+                videoConstraints: {
+                    // ไม่ต้องใส่ facingMode ที่นี่ เพราะจะถูกกำหนดใน .start()
+                    // สั่งให้กล้องพยายามใช้โหมดโฟกัสต่อเนื่อง
+                    advanced: [{
+                        focusMode: "continuous"
+                    }]
+                }
             };
             
-            // === **ส่วนที่แก้ไข: กลับไปใช้การตั้งค่ากล้องแบบพื้นฐานที่ทำงานได้แน่นอน** ===
             html5QrCode.start(
-                { facingMode: "environment" }, // ใช้วิธีเรียกแบบง่าย มี key แค่ 1 ตัว
-                config,
+                { facingMode: "environment" },
+                config, // ส่ง config ที่มีการตั้งค่ากล้องขั้นสูงเข้าไป
                 onScanSuccess,
                 onScanFailure
             ).catch(err => {
