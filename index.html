@@ -5,68 +5,85 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Meter Scanner</title>
     <style>
+        /* --- Universal Reset & Font --- */
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             text-align: center; margin: 0; background-color: #f4f4f9;
             color: #333; display: flex; justify-content: center;
             align-items: center; min-height: 100vh;
-            -webkit-tap-highlight-color: transparent;
         }
+
+        /* --- Layout & Containers --- */
         .container {
             max-width: 95%; width: 480px; background: #fff;
             padding: 25px; border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); margin: 20px;
-            box-sizing: border-box;
+            box-shadow: 0 4px_12px rgba(0, 0, 0, 0.1); margin: 20px;
         }
+        #qr-reader-container {
+            width: 100%; border-radius: 8px; overflow: hidden;
+            border: 1px solid #eee; position: relative; margin-bottom: 20px;
+        }
+
+        /* --- Text & Headings --- */
         h1, h2 { color: #333; margin-top: 0; margin-bottom: 20px; }
-        #qr-reader-container { width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid #eee; position: relative; }
+        #modalQrData { font-weight: bold; }
         .status-message {
-            margin-top: 20px; font-weight: bold; min-height: 50px;
-            display: flex; align-items: center; justify-content: center;
-            flex-direction: column;
+            font-weight: bold; min-height: 24px; margin-top: 15px;
+            font-size: 1.1em;
         }
-        #result { color: #28a745; font-size: 1.6em; word-break: break-all; }
+
+        /* --- Buttons --- */
         button {
             color: white; padding: 15px 20px; font-size: 1.1em;
             font-weight: bold; border: none; border-radius: 8px;
             cursor: pointer; transition: background-color 0.3s, transform 0.1s;
-            width: 100%; margin-top: 10px; box-sizing: border-box;
+            width: 100%; margin-top: 10px;
         }
         button:active { transform: scale(0.98); }
-        button#startScanBtn { background-color: #007bff; }
-        button#startScanBtn:hover { background-color: #0056b3; }
-        button#stopScanBtn { background-color: #6c757d; margin-top: 20px; }
-        button#stopScanBtn:hover { background-color: #5a6268; }
+        button:disabled { background-color: #a9a9a9; cursor: not-allowed; }
 
-        .modal-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0, 0, 0, 0.6); display: flex;
-            justify-content: center; align-items: center; z-index: 1000;
-        }
-        .modal-content {
-            background: white; padding: 25px; border-radius: 10px;
-            width: 90%; max-width: 400px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3); text-align: center;
-        }
-        .modal-content input[type="number"] {
-            width: calc(100% - 24px); padding: 12px; font-size: 1.5em;
-            margin: 15px 0; border: 1px solid #ddd;
-            border-radius: 4px; text-align: center;
-        }
-        #modalCancelLink {
-            display: block; margin-top: 15px; color: #6c757d;
-            font-size: 0.9em; text-decoration: none;
-        }
-        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        input[type=number] { -moz-appearance: textfield; }
+        #startScanBtn { background-color: #007bff; }
+        #stopScanBtn { background-color: #6c757d; }
+        #submitMeterBtn { background-color: #28a745; }
 
         #torch-button {
             position: absolute; top: 10px; right: 10px;
             background-color: rgba(0, 0, 0, 0.5);
             color: white; border: none; border-radius: 50%;
-            width: 40px; height: 40px; font-size: 20px;
-            cursor: pointer; z-index: 10;
+            width: 44px; height: 44px; font-size: 24px;
+            cursor: pointer; z-index: 10; display: none; /* Hide by default */
         }
+
+        /* --- Modal --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.6); display: none; /* Hide by default */
+            justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-content {
+            background: white; padding: 25px; border-radius: 10px;
+            width: 90%; max-width: 400px; text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .modal-content input[type="number"] {
+            width: 100%; padding: 12px; font-size: 1.5em;
+            margin: 15px 0; border: 1px solid #ddd;
+            border-radius: 4px; text-align: center;
+        }
+        .modal-cancel-link {
+            display: block; margin-top: 15px; color: #6c757d;
+            font-size: 0.9em; text-decoration: none; cursor: pointer;
+        }
+
+        /* --- Input Number Appearance --- */
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
+             -webkit-appearance: none; margin: 0;
+        }
+        input[type=number] { -moz-appearance: textfield; }
     </style>
 </head>
 <body>
@@ -75,107 +92,154 @@
             <h1>Meter Scanner</h1>
             <button id="startScanBtn">กดเพื่อเริ่มสแกน</button>
         </div>
+
         <div id="scanScreen" style="display: none;">
             <div id="qr-reader-container">
                 <div id="qr-reader"></div>
-                <button id="torch-button" style="display: none;">🔦</button>
+                <button id="torch-button">🔦</button>
             </div>
-            <button id="stopScanBtn">ยกเลิก</button>
+            <button id="stopScanBtn">ยกเลิกการสแกน</button>
         </div>
     </div>
 
-    <div id="meterModal" class="modal-overlay" style="display: none;">
+    <div id="meterModal" class="modal-overlay">
         <div class="modal-content">
             <h2>บันทึกค่ามิเตอร์</h2>
-            <p>รหัสมิเตอร์: <strong id="modalQrData"></strong></p>
+            <p>รหัสมิเตอร์: <span id="modalQrData"></span></p>
             <form id="meterForm">
                 <input type="number" id="meterReadingInput" placeholder="กรอกเลขหน่วยไฟฟ้า" inputmode="numeric" pattern="[0-9]*" required>
-                <button type="submit">ยืนยันข้อมูล</button>
+                <button type="submit" id="submitMeterBtn">ยืนยันข้อมูล</button>
             </form>
-             <p id="modalStatus" style="font-weight: bold;"></p>
-             <a href="#" id="modalCancelLink">ยกเลิก</a>
+            <div id="modalStatus" class="status-message"></div>
+            <a class="modal-cancel-link">สแกนใหม่</a>
         </div>
     </div>
 
-    <audio id="scanSound" preload="auto">
-        <source src="https://github.com/tonatona/card-flip/raw/master/sound/turn.mp3" type="audio/mpeg">
-    </audio>
+    <audio id="scanSound" preload="auto" src="https://github.com/tonatona/card-flip/raw/master/sound/turn.mp3"></audio>
 
     <script src="https://unpkg.com/html5-qrcode/html5-qrcode.min.js"></script>
+
     <script>
-        const webAppUrl = 'https://script.google.com/macros/s/AKfycbx8i2M8ulP59744o58SUAp4indrxyNibkGYj2uZaXMKMPhCP9-OMyF3lfox38CsOJYflw/exec';
+        // Wait for the DOM to be fully loaded before running the script
+        document.addEventListener('DOMContentLoaded', () => {
 
-        // --- DOM Elements ---
-        const mainScreen = document.getElementById('mainScreen');
-        const scanScreen = document.getElementById('scanScreen');
-        const startScanBtn = document.getElementById('startScanBtn');
-        const stopScanBtn = document.getElementById('stopScanBtn');
-        const qrReaderDivId = "qr-reader";
-        const meterModal = document.getElementById('meterModal');
-        const meterForm = document.getElementById('meterForm');
-        const modalQrData = document.getElementById('modalQrData');
-        const meterReadingInput = document.getElementById('meterReadingInput');
-        const modalStatus = document.getElementById('modalStatus');
-        const modalCancelLink = document.getElementById('modalCancelLink');
-        const sound = document.getElementById('scanSound');
-        const torchButton = document.getElementById('torch-button');
+            // --- Configuration ---
+            const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx8i2M8ulP59744o58SUAp4indrxyNibkGYj2uZaXMKMPhCP9-OMyF3lfox38CsOJYflw/exec';
+            const QR_READER_DIV_ID = "qr-reader";
 
-        let html5QrCode;
-        let scannedQrData = null;
-        let isTorchOn = false;
+            // --- DOM Elements ---
+            const mainScreen = document.getElementById('mainScreen');
+            const scanScreen = document.getElementById('scanScreen');
+            const startScanBtn = document.getElementById('startScanBtn');
+            const stopScanBtn = document.getElementById('stopScanBtn');
+            const torchButton = document.getElementById('torch-button');
 
-        // --- Functions ---
-        function onScanSuccess(decodedText, decodedResult) {
-            if (sound) {
-                sound.currentTime = 0;
-                sound.play();
-            }
-            
-            html5QrCode.stop().then(() => {
-                torchButton.style.display = 'none';
-                scannedQrData = decodedText;
-                modalQrData.textContent = scannedQrData;
-                meterReadingInput.value = '';
-                modalStatus.textContent = '';
-                meterModal.style.display = 'flex';
-                meterReadingInput.focus();
-            }).catch(err => console.error("Failed to stop scanner after success.", err));
-        }
+            const meterModal = document.getElementById('meterModal');
+            const meterForm = document.getElementById('meterForm');
+            const modalQrData = document.getElementById('modalQrData');
+            const meterReadingInput = document.getElementById('meterReadingInput');
+            const modalStatus = document.getElementById('modalStatus');
+            const submitMeterBtn = document.getElementById('submitMeterBtn');
+            const modalCancelLink = meterModal.querySelector('.modal-cancel-link');
 
-        function onScanFailure(error) { /* Do nothing */ }
+            const scanSound = document.getElementById('scanSound');
 
-        function showScreen(screenToShow) {
-            mainScreen.style.display = (screenToShow === 'main') ? 'block' : 'none';
-            scanScreen.style.display = (screenToShow === 'scan') ? 'block' : 'none';
-        }
+            // --- State Variables ---
+            let html5QrCode = null; // To hold the scanner instance
+            let isScanning = false;  // Flag to prevent transition errors
+            let isTorchOn = false;
+            let scannedQrData = null;
 
-        function startScanner() {
-            showScreen('scan');
-            // ใช้การตั้งค่าแบบพื้นฐานและเสถียรที่สุด
-            html5QrCode = new Html5Qrcode(qrReaderDivId, {
-                formatsToSupport: [ 
-                    Html5QrcodeSupportedFormats.QR_CODE,
-                    Html5QrcodeSupportedFormats.CODE_128,
-                    Html5QrcodeSupportedFormats.CODE_39,
-                    Html5QrcodeSupportedFormats.EAN_13,
-                    Html5QrcodeSupportedFormats.EAN_8,
-                    Html5QrcodeSupportedFormats.UPC_A,
-                    Html5QrcodeSupportedFormats.UPC_E
-                ]
-            });
-
-            const config = { 
-                fps: 10, 
-                qrbox: { width: 250, height: 150 }
+            // --- UI/Screen Management ---
+            const showScreen = (screenName) => {
+                mainScreen.style.display = (screenName === 'main') ? 'block' : 'none';
+                scanScreen.style.display = (screenName === 'scan') ? 'block' : 'none';
             };
 
-            html5QrCode.start(
-                { facingMode: "environment" },
-                config,
-                onScanSuccess,
-                onScanFailure
-            ).then(async () => {
-                // หลังจากกล้องเริ่มทำงานแล้ว ค่อยตรวจสอบเรื่องแฟลช
+            const showModal = (shouldShow) => {
+                meterModal.style.display = shouldShow ? 'flex' : 'none';
+            };
+
+            // --- Scanner Logic ---
+            const startScanner = () => {
+                if (isScanning) {
+                    console.warn("Scanner start requested, but already active.");
+                    return;
+                }
+                isScanning = true;
+                showScreen('scan');
+
+                // Initialize the scanner instance if it doesn't exist
+                if (!html5QrCode) {
+                    html5QrCode = new Html5Qrcode(QR_READER_DIV_ID, {
+                        formatsToSupport: [
+                            Html5QrcodeSupportedFormats.QR_CODE,
+                            Html5QrcodeSupportedFormats.CODE_128,
+                            Html5QrcodeSupportedFormats.CODE_39,
+                            Html5QrcodeSupportedFormats.EAN_13,
+                        ]
+                    });
+                }
+
+                const config = {
+                    fps: 10,
+                    qrbox: (viewportWidth, viewportHeight) => {
+                        const minEdge = Math.min(viewportWidth, viewportHeight);
+                        const size = Math.floor(minEdge * 0.75); // Use 75% of the smaller screen dimension
+                        return { width: size, height: size };
+                    },
+                    rememberLastUsedCamera: true, // Improves user experience on repeated use
+                    supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
+                };
+
+                html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess, onScanFailure)
+                    .then(() => {
+                        // Check for torch capabilities after the camera has started
+                        checkTorchCapability();
+                    })
+                    .catch(err => {
+                        isScanning = false;
+                        alert(`ไม่สามารถเปิดกล้องได้: ${err}`);
+                        showScreen('main');
+                    });
+            };
+
+            const stopScanner = () => {
+                if (html5QrCode && html5QrCode.isScanning) {
+                    return html5QrCode.stop()
+                        .then(() => {
+                            isScanning = false;
+                            torchButton.style.display = 'none';
+                            console.log("Scanner stopped successfully.");
+                        })
+                        .catch(err => {
+                            isScanning = false;
+                            console.error("Failed to stop scanner.", err);
+                        });
+                }
+                return Promise.resolve();
+            };
+
+            const onScanSuccess = (decodedText, decodedResult) => {
+                scanSound.play().catch(e => console.log("Sound play failed."));
+
+                // Stop the scanner and then show the modal
+                stopScanner().then(() => {
+                    scannedQrData = decodedText;
+                    modalQrData.textContent = scannedQrData;
+                    meterReadingInput.value = '';
+                    modalStatus.textContent = '';
+                    submitMeterBtn.disabled = false;
+                    showModal(true);
+                    meterReadingInput.focus();
+                });
+            };
+
+            const onScanFailure = (error) => {
+                // This is called frequently. It's best to ignore it.
+            };
+
+            const checkTorchCapability = () => {
                 try {
                     const capabilities = html5QrCode.getRunningTrackCameraCapabilities();
                     if (capabilities.torch) {
@@ -184,68 +248,64 @@
                 } catch (e) {
                     console.warn("Could not get camera capabilities for torch.", e);
                 }
-            }).catch(err => {
-                alert(`ไม่สามารถเปิดกล้องได้: ${err}`);
-                showScreen('main');
+            };
+
+            // --- Event Listeners ---
+            startScanBtn.addEventListener('click', startScanner);
+
+            stopScanBtn.addEventListener('click', () => {
+                stopScanner().then(() => showScreen('main'));
             });
-        }
-        
-        // --- Event Listeners ---
-        startScanBtn.addEventListener('click', () => {
-             if (sound) {
-                sound.load();
-                sound.play().catch(e => {});
-                sound.pause();
-            }
-            startScanner();
-        });
 
-        stopScanBtn.addEventListener('click', () => {
-            if (html5QrCode && html5QrCode.isScanning) {
-                html5QrCode.stop().catch(err => console.error("Failed to stop scanner on cancel.", err));
-            }
-            torchButton.style.display = 'none';
-            showScreen('main');
-        });
+            torchButton.addEventListener('click', () => {
+                if (html5QrCode && html5QrCode.isScanning) {
+                    isTorchOn = !isTorchOn;
+                    html5QrCode.applyVideoConstraints({ advanced: [{ torch: isTorchOn }] });
+                }
+            });
 
-        torchButton.addEventListener('click', () => {
-            if (html5QrCode && html5QrCode.isScanning) {
-                isTorchOn = !isTorchOn;
-                html5QrCode.applyVideoConstraints({
-                    advanced: [{ torch: isTorchOn }]
+            meterForm.addEventListener('submit', (event) => {
+                event.preventDefault();
+                const meterReading = meterReadingInput.value;
+                if (!meterReading) {
+                    alert('กรุณากรอกเลขหน่วยไฟฟ้า');
+                    return;
+                }
+
+                // Disable button to prevent multiple submissions
+                submitMeterBtn.disabled = true;
+                modalStatus.style.color = 'blue';
+                modalStatus.textContent = 'กำลังส่งข้อมูล...';
+
+                const dataToSend = { qrData: scannedQrData, meterReading: meterReading, timestamp: new Date().toISOString() };
+
+                // "Fire-and-forget" request due to no-cors mode limitations
+                fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    cache: 'no-cache',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(dataToSend),
+                    redirect: 'follow'
                 });
-            }
-        });
 
-        meterForm.addEventListener('submit', (event) => {
-            event.preventDefault(); 
-            const meterReading = meterReadingInput.value;
-            if (!meterReading) {
-                alert('กรุณากรอกเลขหน่วยไฟฟ้า'); return;
-            }
-            modalStatus.style.color = 'blue';
-            modalStatus.textContent = 'กำลังส่งข้อมูล...';
-            const dataToSend = { qrData: scannedQrData, meterReading: meterReading };
-            fetch(webAppUrl, { method: 'POST', mode: 'no-cors', body: JSON.stringify(dataToSend) })
-            .then(() => {
+                // Since we can't confirm success with 'no-cors', we assume it was sent.
                 modalStatus.style.color = 'green';
-                modalStatus.textContent = '✅ ส่งข้อมูลสำเร็จ!';
-                setTimeout(() => {
-                    meterModal.style.display = 'none';
-                    startScanner(); 
-                }, 500);
-            })
-            .catch(error => {
-                modalStatus.style.color = 'red';
-                modalStatus.textContent = `❌ เกิดข้อผิดพลาด`;
-                 setTimeout(() => { modalStatus.textContent = ''; }, 3000);
-            });
-        });
+                modalStatus.textContent = '✅ ส่งข้อมูลแล้ว';
 
-        modalCancelLink.addEventListener('click', (event) => {
-            event.preventDefault();
-            meterModal.style.display = 'none';
-            startScanner();
+                // Close modal and restart scanner after a short delay
+                setTimeout(() => {
+                    showModal(false);
+                    startScanner();
+                }, 1000);
+            });
+
+            modalCancelLink.addEventListener('click', (event) => {
+                event.preventDefault();
+                showModal(false);
+                startScanner(); // Go back to scanning
+            });
+
         });
     </script>
 </body>
